@@ -1,88 +1,79 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+import threading
 import time
 import os
-import re
 
-# Read bot token from environment variable
-bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+# Global variable to track whether the bot is currently fetching updates
+is_fetching_updates = False
 
-# Path to the ChromeDriver executable
-chrome_driver_path = r"C:\Users\KY\Downloads\Compressed\chromedriver-win64\chromedriver-win64\chromedriver.exe"
+# Lock to prevent multiple threads from fetching updates simultaneously
+fetch_updates_lock = threading.Lock()
+
+# Path to the directory containing the ChromeDriver executable
+chrome_driver_dir = os.path.join(os.getcwd(), 'chromedriver')
 
 # Initialize Telegram Bot
+bot_token = 'YOUR_BOT_TOKEN'
 updater = Updater(token=bot_token)
 dispatcher = updater.dispatcher
 
 # Function to handle messages
 def handle_message(update, context):
+    global is_fetching_updates
+
     # Extract the message text
     message_text = update.message.text
+    
+    # Check if the bot is currently fetching updates
+    if is_fetching_updates:
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Another instance of the bot is currently processing updates. Please try again later.")
+        return
 
-    # Check if the message is a forwarded message
-    if update.message.forward_date:
-        # Extract the forwarded message
-        message_text = update.message.forward_from.text
+    # Acquire the lock to prevent other threads from fetching updates
+    with fetch_updates_lock:
+        is_fetching_updates = True
 
-    # Check if the message is lengthy
-    if len(message_text) > 100:
-        # Extract the URL if it contains 'https://studybullet.com/course/'
-        urls = re.findall(r'https://studybullet\.com/course/[^\s]+', message_text)
-        if urls:
-            # Handle each URL found
-            for url in urls:
-                process_url(url, update, context)
-        else:
-            context.bot.send_message(chat_id=update.effective_chat.id, text="No valid URL found in the message.")
-    else:
-        # Check if the message contains a URL
-        if message_text.startswith('http://') or message_text.startswith('https://'):
-            process_url(message_text, update, context)
-        else:
-            context.bot.send_message(chat_id=update.effective_chat.id, text="No valid URL found in the message.")
+        try:
+            # Check if the message contains a URL
+            if message_text.startswith('http://') or message_text.startswith('https://'):
+                # Initialize Chrome webdriver in headless mode
+                options = webdriver.ChromeOptions()
+                options.add_argument('--headless')
+                driver = webdriver.Chrome(executable_path=chrome_driver_dir, options=options)
 
-# Function to process URL
-def process_url(url, update, context):
-    # Set Chrome options for headless mode
-    chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
+                # Open the webpage
+                driver.get(message_text)
 
-    # Initialize Chrome webdriver
-    driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
+                # Find the element by ID
+                coupon_element = driver.find_element_by_id("couponDigits2")
 
-    try:
-        # Open the webpage
-        driver.get(url)
+                # Add a delay
+                time.sleep(1)
 
-        # Find the element by ID
-        coupon_element = driver.find_element_by_id("couponDigits2")
+                # Get the text value
+                coupon_code = coupon_element.text
 
-        # Add a delay
-        time.sleep(1)
+                # Print the coupon code
+                context.bot.send_message(chat_id=update.effective_chat.id, text=f"Coupon Code: {coupon_code}")
 
-        # Get the text value
-        coupon_code = coupon_element.text
+                # Create the new URL with coupon code
+                new_url = message_text.replace("studybullet.com", "www.udemy.com") + f"?couponCode={coupon_code}"
 
-        # Print the coupon code
-        context.bot.send_message(chat_id=update.effective_chat.id, text=f"Coupon Code: {coupon_code}")
+                # Open the new URL
+                driver.get(new_url)
 
-        # Create the new URL with coupon code
-        new_url = url.replace("studybullet.com", "www.udemy.com") + f"?couponCode={coupon_code}"
+                context.bot.send_message(chat_id=update.effective_chat.id, text=f"New URL: {new_url}")
 
-        # Open the new URL
-        driver.get(new_url)
+                # Close the browser
+                driver.quit()
 
-        context.bot.send_message(chat_id=update.effective_chat.id, text=f"New URL: {new_url}")
+        except Exception as e:
+            context.bot.send_message(chat_id=update.effective_chat.id, text=f"An error occurred: {e}")
 
-    except Exception as e:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=f"An error occurred: {e}")
-
-    finally:
-        # Close the browser
-        driver.quit()
+        finally:
+            # Release the lock after processing updates
+            is_fetching_updates = False
 
 # Handler for starting the bot
 def start(update, context):
