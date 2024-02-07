@@ -1,15 +1,18 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 import time
+import os
+import re
 
-# Import your bot token from config.py
-from config import BOT_TOKEN
+# Read bot token from environment variable
+bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
 
 # Path to the ChromeDriver executable
 chrome_driver_path = r"C:\Users\KY\Downloads\Compressed\chromedriver-win64\chromedriver-win64\chromedriver.exe"
 
 # Initialize Telegram Bot
-updater = Updater(token=BOT_TOKEN)
+updater = Updater(token=bot_token)
 dispatcher = updater.dispatcher
 
 # Function to handle messages
@@ -41,8 +44,14 @@ def handle_message(update, context):
 
 # Function to process URL
 def process_url(url, update, context):
+    # Set Chrome options for headless mode
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+
     # Initialize Chrome webdriver
-    driver = webdriver.Chrome(executable_path=chrome_driver_path)
+    driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
 
     try:
         # Open the webpage
