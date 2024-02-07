@@ -1,6 +1,6 @@
 teleboto/
 │
-├── main.py
+├── bot.py
 ├── requirements.txt
 ├── Procfile
 ├── config.py
